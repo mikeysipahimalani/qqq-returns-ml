@@ -13,3 +13,6 @@ __pycache__/
 
 # Local secrets
 .env
+
+# Review/export archives (do not commit another copy of the repo)
+qqq-returns-ml*.zip
