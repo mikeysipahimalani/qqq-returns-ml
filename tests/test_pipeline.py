@@ -5,6 +5,7 @@ import sys
 import unittest
 
 import numpy as np
+import pandas as pd
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
@@ -37,6 +38,30 @@ class PipelineTests(unittest.TestCase):
             atol=1e-12,
         )
 
+    def test_price_snapshot_recreates_model_features(self):
+        """Saved OHLC prices should generate the committed model inputs."""
+        prices = pd.read_csv(
+            PROJECT_DIR / "data" / "qqq_prices.csv",
+            index_col="Date", parse_dates=["Date"],
+        )
+        returns = prices["Close"].pct_change() * 100
+        rebuilt = pd.DataFrame(index=prices.index)
+        rebuilt["Daily_Return_Pct"] = returns
+        rebuilt["Momentum_5d_Pct"] = prices["Close"].pct_change(5) * 100
+        rebuilt["Volatility_20d_Pct"] = returns.rolling(20).std()
+        rebuilt["MA_Distance_20d_Pct"] = (
+            prices["Close"] / prices["Close"].rolling(20).mean() - 1
+        ) * 100
+        rebuilt[TARGET_COLUMN] = returns.shift(-1)
+        rebuilt = rebuilt.dropna()
+
+        pd.testing.assert_index_equal(rebuilt.index, self.data.index)
+        np.testing.assert_allclose(
+            rebuilt[FEATURE_COLUMNS + [TARGET_COLUMN]].to_numpy(),
+            self.data[FEATURE_COLUMNS + [TARGET_COLUMN]].to_numpy(),
+            rtol=0, atol=1e-10,
+        )
+
     def test_original_time_boundaries(self):
         train, val, test = chronological_split(self.data)
         self.assertEqual((len(train), len(val), len(test)), (2918, 624, 626))
@@ -52,7 +77,7 @@ class PipelineTests(unittest.TestCase):
         )
         prediction = model.predict(test[FEATURE_COLUMNS])
         rmse = regression_metrics(test[TARGET_COLUMN], prediction)["RMSE"]
-        self.assertAlmostEqual(rmse, 1.314285, places=5)
+        self.assertAlmostEqual(rmse, 1.314286, places=5)
 
 
 if __name__ == "__main__":

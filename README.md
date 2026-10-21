@@ -8,7 +8,7 @@ An end-to-end quantitative finance research project using historical QQQ prices,
 
 | Notebook | Question | Main output |
 |---|---|---|
-| [`01_data_exploration.ipynb`](notebooks/01_data_exploration.ipynb) | What do QQQ prices, return distributions, and volatility look like? | `data/qqq_prices.csv` source snapshot |
+| [`01_data_exploration.ipynb`](notebooks/01_data_exploration.ipynb) | What do QQQ prices, return distributions, and volatility look like? | Exploratory figures; optional price refresh |
 | [`02_feature_engineering.ipynb`](notebooks/02_feature_engineering.ipynb) | What information available after today's close might predict tomorrow's return? | `data/qqq_model_data.csv` |
 | [`03_modeling.ipynb`](notebooks/03_modeling.ipynb) | Which candidate best generalizes to a later validation period? | Baselines, linear regression, Random Forest, tuned forest, gradient boosting |
 | [`04_final_evaluation.ipynb`](notebooks/04_final_evaluation.ipynb) | Does the frozen model beat the baselines on the reserved test period? | Held-out MAE/RMSE and diagnostics |
@@ -36,20 +36,20 @@ qqq-polished/  # local folder name; GitHub repo name may differ
 └── README.md
 ```
 
-**Data flow:** notebook 01 collects historical QQQ prices and saves `qqq_prices.csv`; notebook 02 calculates the indicators and target and writes `qqq_model_data.csv`; notebooks 03–05 use the saved files. Keep the two CSV files together in the repository so the analyses use the same price snapshot. Historical adjusted prices from a market-data vendor may be revised when downloaded again. For consistent reproduction, use the committed CSVs instead of downloading again every time.
+**Data flow:** notebook 01 loads the saved price snapshot (with an optional explicit refresh); notebook 02 calculates the indicators and target and writes `qqq_model_data.csv`; notebooks 03–05 use the saved files. Keep the two CSV files together in the repository so the analyses use the same price snapshot. Historical adjusted prices from a market-data vendor may be revised when downloaded again. For consistent reproduction, use the committed CSVs instead of downloading again every time.
 
 ## Run the project
 
 1. Use Python 3.14 (the project was developed on macOS): `python3 -m venv .venv`.
 2. Activate it with `source .venv/bin/activate`, then install dependencies: `python -m pip install -r requirements.txt ipykernel`.
 3. In VS Code / Jupyter, select the `.venv` kernel.
-4. **For the saved historical snapshot:** start at notebook **02** and run notebooks **02 → 03 → 04 → 05** in order, using **Restart & Run All**. Notebook 02 regenerates the same feature and target definitions into `qqq_model_data.csv`. Notebooks 03–05 independently reload what they need; they do not depend on another notebook's in-memory variables.
-5. Notebook **01** documents the original data exploration and downloads an OHLCV snapshot. **Rerunning its download cell may overwrite `qqq_prices.csv` with revised vendor prices**, which can slightly change downstream metrics. Do this only if you intentionally want to refresh the source data. It is not required when reproducing results with the committed snapshots.
+4. To reproduce the analysis, run notebooks **01 → 02 → 03 → 04 → 05** in order with **Restart & Run All**. Notebook 01 loads the saved price file without redownloading; notebook 02 generates the four features and target into `qqq_model_data.csv`. Notebooks 03–05 independently reload what they need.
+5. Notebook **01** has `REFRESH_DATA = False` by default. Set it to `True` **only when intentionally updating** `qqq_prices.csv`; doing so may change all subsequent modeling results because vendor prices can be revised. Do not refresh data when reproducing the reported experiment.
 6. From the project root, run automated integrity checks: `python -m unittest discover -s tests -v`.
 
 `src/qqq_utils.py` holds the shared feature names, chronological split, regression metrics, and selected Random Forest parameters. This reduces copy-paste differences between notebooks while leaving the experiments visible.
 
-The approximate results below were verified with the saved project data. Floating-point precision, library versions, and future price-vendor revisions can affect last-decimal output; do not reinterpret those tiny variations as new modeling discoveries.
+The results below were verified against the saved datasets. The price snapshot reproduces the model features and targets to floating-point precision. Different library versions may still affect last-decimal output.
 
 ## Data and prediction target
 
@@ -152,23 +152,23 @@ Assumed round-trip cost per active intraday trade was 0, 5, or 10 basis points (
 | Always intraday, 5 bp | −28.89% |
 | QQQ buy-and-hold, 5 bp | +62.56% |
 
-The model signaled a long position on **594 of 626 sessions (94.89%)**. While continuous forecasts had a positive ~0.1965 correlation with future intraday returns, the sign-based strategy's trading days averaged slightly negative intraday returns. The 0 bp strategy also lost money, so costs alone do not explain the result.
+Across **626 trading sessions (March 5, 2024 – September 1, 2026)**, the model signaled a long position on **594 sessions (94.89%)**. The preceding model test *signal dates* ran March 4, 2024 – August 31, 2026. While continuous forecasts had a positive ~0.1965 correlation with future intraday returns, the sign-based strategy's trading days averaged slightly negative intraday returns. The 0 bp strategy also lost money, so costs alone do not explain the result.
 
-**Conclusion:** The tested strategy does **not** establish profitable trading alpha. Reworking the target to match execution, or using intraday data available before a proposed pre-close order, would be a new research question—not a retroactive correction of this held-out result.
+**Conclusion:** The tested strategy did **not** demonstrate profitable trading performance. Reworking the target to match execution, or using intraday data available before a proposed pre-close order, would be a new research question—not a retroactive correction of this held-out result.
 
 ## Limitations and potential next steps
 
 - One ETF, one historical split, and no regime-by-regime or statistical-significance analysis.
 - Minimal price-derived features, not a comprehensive market/macro/microstructure dataset.
 - Validation tuning can capitalize on one regime even with conservative hyperparameters.
-- Historical adjusted-price downloads can be revised. The original raw OHLCV file was not committed during the initial exploratory research; the saved snapshot was added during project cleanup. Accordingly, the original analysis is reproducible to reported precision, not guaranteed bit-for-bit from a new download.
+- Historical adjusted-price downloads can be revised. The saved OHLCV snapshot was added during project cleanup, and it reproduces the model-ready dataset to floating-point precision. A future vendor redownload need not be identical.
 - Strategy implementation ignores realistic order-book slippage, market impact, tax treatment, and interest on cash; risk-free rate is assumed zero for reported Sharpe ratios.
 - Trading decisions and cost scenarios were examined **after** forecasting test performance was revealed; the strategy backtest is exploratory and not a second untouched holdout.
 
 Possible **new** studies: open-to-close labels with after-close signals, pre-close features with executable closing-auction constraints, rolling walk-forward evaluation, multiple market regimes and ETFs, turnover-aware exposure controls, and significance/uncertainty estimates. None should be promoted as independent test results using this already-viewed period.
 
-## Interview-ready summary
+## Conclusion
 
-> Built a leakage-conscious QQQ return-forecasting pipeline with engineered momentum, volatility, and moving-average indicators, chronological train/validation/test splits, and OLS/tree-based comparisons. A validation-selected Random Forest lowered held-out RMSE by ~2.2% relative to a zero-return baseline, but an exploratory next-day intraday strategy lost money after realistic timing and illustrative transaction-cost assumptions. The main lesson was the difference between statistical forecast quality and executable trading performance.
+The tuned Random Forest modestly reduced next-day close-to-close forecasting error against simple baselines. However, using the forecasts to decide when to trade next-day open-to-close returns lost money, even without transaction costs. The experiment illustrates the difference between improving a forecast metric and finding a usable trading strategy.
 
 *Educational research only; not investment advice.*
